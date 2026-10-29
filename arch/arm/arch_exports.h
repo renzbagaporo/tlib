@@ -23,6 +23,7 @@ uint32_t tlib_get_exception_vector_address(void);
 void tlib_set_exception_vector_address(uint32_t address);
 
 #ifdef TARGET_PROTO_ARM_M
+uint32_t tlib_enter_halting_debug(void);
 void tlib_set_sleep_on_exception_exit(int32_t);
 void tlib_add_fpb_breakpoint(uint32_t address);
 void tlib_remove_fpb_breakpoint(uint32_t address);

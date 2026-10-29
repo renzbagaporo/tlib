@@ -19,6 +19,7 @@
  */
 #include <stdint.h>
 #include "cpu.h"
+#include "atomic.h"
 #include "helper.h"
 #include "system_registers.h"
 #include "unwind.h"
@@ -199,6 +200,35 @@ uint32_t tlib_get_arm_feature(int32_t feature)
 EXC_INT_1(uint32_t, tlib_get_arm_feature, int32_t, feature)
 
 #ifdef TARGET_PROTO_ARM_M
+
+uint32_t tlib_enter_halting_debug(void)
+{
+    uint32_t previous = 0;
+    if(cpu->wfi || cpu->wfe || cpu->was_not_working) {
+        previous |= 1;
+        /* Arm DDI0553B.y IWCBD/RLLVC/IZLPK: debug wakes a completed wait
+         * and clears the exclusive monitor. RVJKX preserves Event Register. */
+        cpu->wfi = 0;
+        cpu->wfe = 0;
+        cpu->was_not_working = false;
+        cpu->exclusive_val = -1;
+        cpu->exclusive_high = -1;
+        if(cpu->atomic_memory_state != NULL) cancel_reservation(cpu);
+    }
+    if(cpu->v7m.locked_up) {
+        /* RXQSR/RHJNP: Debug entry exits Lockup but preserves its return PC. */
+        previous |= 2;
+        cpu->v7m.locked_up = false;
+    }
+    if(cpu->exception_index == EXCP_WFI || cpu->exception_index == EXCP_LOCKUP) {
+        cpu->exception_index = -1;
+    }
+    /* The managed owner publishes sleep/Lockup transitions after releasing
+     * its reset monitor, before acknowledging Debug state to the debugger. */
+    return previous;
+}
+EXC_INT_0(uint32_t, tlib_enter_halting_debug)
+
 
 void tlib_set_security_state(uint32_t state)
 {
