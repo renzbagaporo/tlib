@@ -3627,16 +3627,6 @@ inline int get_phys_addr(CPUState *env, uint32_t address, bool is_secure, int ac
         env->exception_index = EXCP_INVSTATE;
         return TRANSLATE_FAIL;
     }
-    if(env->rp2350_idau_enabled && access_type == ACCESS_INST_FETCH && rp2350_peripheral_address(address)) {
-        // RP2350 physically disconnects peripheral instruction fetch, even
-        // when software's MPU grants execution. This is a bus fault, not an
-        // MPU or security-attribution violation.
-        if(!no_page_fault) {
-            env->v7m.bus_fault_status |= BUS_FAULT_IBUSERR;
-            env->exception_index = EXCP_BUS_FAULT;
-        }
-        return TRANSLATE_FAIL;
-    }
 #endif
 
     /* Fast Context Switch Extension.  */
@@ -3714,6 +3704,16 @@ inline int get_phys_addr(CPUState *env, uint32_t address, bool is_secure, int ac
     *prot = *prot & idau_sau_allowed_permissions;
 
 #ifdef TARGET_PROTO_ARM_M
+    if(ret == TRANSLATE_SUCCESS && env->rp2350_idau_enabled && access_type == ACCESS_INST_FETCH
+       && rp2350_peripheral_address(address)) {
+        // Architectural permission failures prevent a bus transaction. Only
+        // an otherwise permitted fetch reaches RP2350's disconnected bus.
+        if(!no_page_fault) {
+            env->v7m.bus_fault_status |= BUS_FAULT_IBUSERR;
+            env->exception_index = EXCP_BUS_FAULT;
+        }
+        return TRANSLATE_FAIL;
+    }
     if(env->rp2350_idau_enabled && rp2350_peripheral_address(address)) {
         // A data access must not populate an executable TLB entry.
         *prot &= ~PAGE_EXEC;
