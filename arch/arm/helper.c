@@ -581,6 +581,7 @@ void cpu_reset(CPUState *env)
     uint32_t number_of_mpu_regions = env->number_of_mpu_regions;
 #ifdef TARGET_PROTO_ARM_M
     bool was_locked_up = env->v7m.locked_up;
+    bool rp2350_dcp_enabled = env->rp2350_dcp_enabled;
     uint32_t number_of_idau_regions = env->number_of_idau_regions;
     uint32_t number_of_sau_regions = env->number_of_sau_regions;
 #endif
@@ -590,6 +591,7 @@ void cpu_reset(CPUState *env)
     }
     env->number_of_mpu_regions = number_of_mpu_regions;
 #ifdef TARGET_PROTO_ARM_M
+    env->rp2350_dcp_enabled = rp2350_dcp_enabled;
     env->number_of_idau_regions = number_of_idau_regions;
     env->number_of_sau_regions = number_of_sau_regions;
     if(was_locked_up) {
@@ -651,6 +653,9 @@ int cpu_init(const char *cpu_model)
         return -1;
     }
     cpu->cp15.c0_cpuid = id;
+#ifdef TARGET_PROTO_ARM_M
+    cpu->rp2350_dcp_enabled = strcmp(cpu_model, "cortex-m33-rp2350") == 0;
+#endif
 
     //  We need this to set CPU feature flags, before calling `system_instructions_and_registers_init`
     cpu_reset_model_id(env, id);
@@ -682,6 +687,9 @@ static const struct arm_cpu_t arm_cpu_names[] = {
     { ARM_CPUID_CORTEXM23,      "cortex-m23"     },
     { ARM_CPUID_CORTEXM3,       "cortex-m3"      },
     { ARM_CPUID_CORTEXM33,      "cortex-m33"     },
+#ifdef TARGET_PROTO_ARM_M
+    { ARM_CPUID_CORTEXM33,      "cortex-m33-rp2350" },
+#endif
     //  TODO: M4F should be separate from M4.
     { ARM_CPUID_CORTEXM4,       "cortex-m4"      },
     { ARM_CPUID_CORTEXM7,       "cortex-m4f"     },

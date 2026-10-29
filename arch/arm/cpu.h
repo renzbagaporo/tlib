@@ -507,6 +507,16 @@ typedef struct CPUState {
 
     uint32_t number_of_mpu_regions;
 
+#ifdef TARGET_PROTO_ARM_M
+    /* RP2350 has a separate DCP instance for each security state. */
+    struct {
+        uint64_t xm;
+        uint64_t ym;
+        bool engaged;
+    } rp2350_dcp[M_REG_NUM_BANKS];
+    bool rp2350_dcp_enabled;
+#endif
+
     CPU_COMMON
 
     /* Fields after CPU_COMMON are preserved on reset but not serialized as opposed to the ones before CPU_COMMON. */

@@ -13572,6 +13572,28 @@ static int disas_thumb2_insn(CPUState *env, DisasContext *s, uint32_t insn)
                     return trans_vscclrm(s, &a);
                 }
 
+                if(env->rp2350_dcp_enabled && (extract32(insn, 8, 4) == 4 || extract32(insn, 8, 4) == 5)) {
+                    /* CPACR/NSACR and security checks happen at execution time,
+                     * so a translated instruction observes later permission changes. */
+                    TCGv_i32 status = tcg_temp_local_new_i32();
+                    TCGv_i32 opcode = tcg_const_i32(insn);
+                    int success = gen_new_label();
+                    int done = gen_new_label();
+                    gen_set_condexec(s);
+                    gen_set_pc_im(s->base.pc - 4);
+                    gen_helper_rp2350_dcp(status, cpu_env, opcode);
+                    tcg_gen_brcondi_i32(TCG_COND_EQ, status, 0, success);
+                    gen_helper_exception(status);
+                    tcg_gen_br(done);
+                    gen_set_label(success);
+                    gen_set_pc_im(s->base.pc);
+                    gen_set_label(done);
+                    tcg_temp_free_i32(opcode);
+                    tcg_temp_free_i32(status);
+                    s->base.is_jmp = DISAS_JUMP;
+                    return TRANS_STATUS_SUCCESS;
+                }
+
                 if(!check_coproc_enabled(s, insn)) {
                     /* Execution of the instruction generated NOCP, finish translation of it */
                     return TRANS_STATUS_SUCCESS;
