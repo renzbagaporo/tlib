@@ -16669,6 +16669,18 @@ void setup_disas_context(DisasContextBase *base, CPUState *env)
 int gen_breakpoint(DisasContextBase *base, CPUBreakpoint *bp)
 {
     DisasContext *dc = (DisasContext *)base;
+#ifdef TARGET_PROTO_ARM_M
+    if(bp->flags & BP_CPU) {
+        TCGv_i32 address = tcg_const_i32(dc->base.pc);
+        TCGv_i32 condexec = tcg_const_i32(pack_condexec(dc));
+        TCGv_i32 preceding = tcg_const_i32(dc->base.tb->icount);
+        gen_helper_fpb_breakpoint(cpu_env, address, condexec, preceding);
+        tcg_temp_free_i32(address);
+        tcg_temp_free_i32(condexec);
+        tcg_temp_free_i32(preceding);
+        return 0;
+    }
+#endif
     gen_exception_insn(dc, 0, EXCP_DEBUG);
     LOCK_TB(dc->base.tb);
     /* Advance PC so that clearing the breakpoint will

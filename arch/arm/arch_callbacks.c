@@ -50,6 +50,8 @@ DEFAULT_VOID_HANDLER1(void tlib_rp2350_rcp_fault, uint32_t panic)
 
 DEFAULT_INT_HANDLER1(uint32_t tlib_try_halt_on_debug_breakpoint, void)
 
+DEFAULT_INT_HANDLER1(uint32_t tlib_try_halt_on_fpb_breakpoint, void)
+
 DEFAULT_INT_HANDLER1(uint32_t tlib_has_enabled_trustzone, void)
 
 DEFAULT_INT_HANDLER1(uint32_t tlib_nvic_interrupt_targets_secure, int32_t number)
