@@ -22,6 +22,7 @@ int32_t tlib_nvic_set_pending_vector_fault(int32_t secure, int32_t original_exce
 uint32_t tlib_nvic_get_fpccr_ready_bits(int32_t original_exception, int32_t secure);
 int32_t tlib_nvic_set_pending_lazy_fp_fault(int32_t no, uint32_t fpccr);
 void tlib_on_lockup_state_change(int32_t locked_up);
+uint32_t tlib_try_halt_on_debug_breakpoint(void);
 uint32_t tlib_has_enabled_trustzone(void);
 uint32_t tlib_nvic_interrupt_targets_secure(int32_t no);
 uint32_t tlib_nvic_is_stir_address(uint32_t address);

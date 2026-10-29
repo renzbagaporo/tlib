@@ -2009,6 +2009,10 @@ static void do_interrupt_v7m(CPUState *env)
             v7m_raise_synchronous_exception(env, v7m_exception_number_with_security(env, ARMV7M_EXCP_MEM, env->secure));
             return;
         case EXCP_BKPT:
+            if(tlib_try_halt_on_debug_breakpoint()) {
+                env->exception_index = EXCP_DEBUG;
+                cpu_loop_exit_without_hook(env);
+            }
             /* Banked DEBUG, but it's not exactly true, see below */
             v7m_raise_synchronous_exception(env, v7m_exception_number_with_security(env, ARMV7M_EXCP_DEBUG, env->secure));
             return;
@@ -2392,6 +2396,16 @@ void do_semihosting(CPUState *env)
 void do_interrupt(CPUState *env)
 {
     if(env->exception_index == EXCP_SEMIHOST) {
+#ifdef TARGET_PROTO_ARM_M
+        /* Thumb semihosting advances PC past BKPT. Halting debug takes
+         * precedence and reports the address of the breakpoint itself. */
+        env->regs[15] -= 2;
+        if(tlib_try_halt_on_debug_breakpoint()) {
+            env->exception_index = EXCP_DEBUG;
+            cpu_loop_exit_without_hook(env);
+        }
+        env->regs[15] += 2;
+#endif
         do_semihosting(env);
         return;
     }
