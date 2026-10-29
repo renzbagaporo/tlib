@@ -582,6 +582,7 @@ void cpu_reset(CPUState *env)
 #ifdef TARGET_PROTO_ARM_M
     bool was_locked_up = env->v7m.locked_up;
     bool rp2350_dcp_enabled = env->rp2350_dcp_enabled;
+    bool rp2350_idau_enabled = env->rp2350_idau_enabled;
     uint32_t number_of_idau_regions = env->number_of_idau_regions;
     uint32_t number_of_sau_regions = env->number_of_sau_regions;
 #endif
@@ -592,6 +593,7 @@ void cpu_reset(CPUState *env)
     env->number_of_mpu_regions = number_of_mpu_regions;
 #ifdef TARGET_PROTO_ARM_M
     env->rp2350_dcp_enabled = rp2350_dcp_enabled;
+    env->rp2350_idau_enabled = rp2350_idau_enabled;
     env->number_of_idau_regions = number_of_idau_regions;
     env->number_of_sau_regions = number_of_sau_regions;
     if(was_locked_up) {
@@ -655,6 +657,7 @@ int cpu_init(const char *cpu_model)
     cpu->cp15.c0_cpuid = id;
 #ifdef TARGET_PROTO_ARM_M
     cpu->rp2350_dcp_enabled = strcmp(cpu_model, "cortex-m33-rp2350") == 0;
+    cpu->rp2350_idau_enabled = cpu->rp2350_dcp_enabled;
 #endif
 
     //  We need this to set CPU feature flags, before calling `system_instructions_and_registers_init`
@@ -3275,6 +3278,46 @@ static inline bool pmsav8_idau_try_get_region(CPUState *env, uint32_t address, i
  * returned attribution is the same for the whole page. The same applies if it's value is false from
  * the beginning in which case it will always stay false.
  */
+/* RP2350 datasheet 10.2.2, Table 943. The fixed IDAU is independent of
+ * software's SAU and of the optional programmable IDAU used by other models.
+ * Exempt accesses inherit the issuing security state and bypass the SAU.
+ */
+static bool rp2350_idau_attribution(uint32_t address, int access_type,
+                                    enum security_attribution *attribution, bool *applies_to_whole_page)
+{
+    if(address < 0x10000000) {
+        const uint32_t base = address & ~0x7fffu;
+        const uint32_t offset = address & 0x7fff;
+        if(offset < 0x4300) {
+            update__applies_to_whole_page(address, base, base + 0x42ff, applies_to_whole_page);
+            return true;
+        }
+        if(offset < 0x7e00) {
+            update__applies_to_whole_page(address, base + 0x4300, base + 0x7dff, applies_to_whole_page);
+            // Load/store exemptions differ from instruction attribution here.
+            // Do not reuse data permissions for a later instruction fetch.
+            if(applies_to_whole_page != NULL) {
+                *applies_to_whole_page = false;
+            }
+            *attribution = SA_NONSECURE;
+            return access_type != ACCESS_INST_FETCH;
+        }
+        update__applies_to_whole_page(address, base + 0x7e00, base + 0x7fff, applies_to_whole_page);
+        *attribution = SA_SECURE_NSC;
+        return false;
+    }
+    if((address >= 0x40000000 && address < 0x60000000) || (address & 0xf0000000) == 0xd0000000) {
+        return access_type != ACCESS_INST_FETCH;
+    }
+    *attribution = SA_NONSECURE;
+    return false;
+}
+
+static inline bool rp2350_peripheral_address(uint32_t address)
+{
+    return (address >= 0x40000000 && address < 0x60000000) || (address & 0xf0000000) == 0xd0000000;
+}
+
 static inline void pmsav8_get_security_attribution(CPUState *env, uint32_t address, bool secure, int access_type,
                                                    int access_width, bool *idau_valid, int *idau_region, bool *sau_valid,
                                                    int *sau_region, enum security_attribution *attribution,
@@ -3302,6 +3345,17 @@ static inline void pmsav8_get_security_attribution(CPUState *env, uint32_t addre
     //  Attribution is the same as access security for exemptions; ARMv8-M Manual: Rule LDTN.
     if(pmsav8_is_exempt_from_attribution(address, access_type, applies_to_whole_page)) {
         *attribution = secure ? SA_SECURE : SA_NONSECURE;
+        return;
+    }
+
+    if(env->rp2350_idau_enabled) {
+        enum security_attribution fixed_attribution = SA_NONSECURE;
+        if(rp2350_idau_attribution(address, access_type, &fixed_attribution, applies_to_whole_page)) {
+            *attribution = secure ? SA_SECURE : SA_NONSECURE;
+            return;
+        }
+        *sau_valid = pmsav8_sau_try_get_region(env, address, sau_region, attribution, applies_to_whole_page);
+        *attribution = attribution_get_more_secure(fixed_attribution, *attribution);
         return;
     }
 
@@ -3573,6 +3627,16 @@ inline int get_phys_addr(CPUState *env, uint32_t address, bool is_secure, int ac
         env->exception_index = EXCP_INVSTATE;
         return TRANSLATE_FAIL;
     }
+    if(env->rp2350_idau_enabled && access_type == ACCESS_INST_FETCH && rp2350_peripheral_address(address)) {
+        // RP2350 physically disconnects peripheral instruction fetch, even
+        // when software's MPU grants execution. This is a bus fault, not an
+        // MPU or security-attribution violation.
+        if(!no_page_fault) {
+            env->v7m.bus_fault_status |= BUS_FAULT_IBUSERR;
+            env->exception_index = EXCP_BUS_FAULT;
+        }
+        return TRANSLATE_FAIL;
+    }
 #endif
 
     /* Fast Context Switch Extension.  */
@@ -3648,6 +3712,13 @@ inline int get_phys_addr(CPUState *env, uint32_t address, bool is_secure, int ac
     //  See the comment above `idau_sau_page_size` and `idau_sau_allowed_permissions` declarations.
     *page_size = MIN(idau_sau_page_size, *page_size);
     *prot = *prot & idau_sau_allowed_permissions;
+
+#ifdef TARGET_PROTO_ARM_M
+    if(env->rp2350_idau_enabled && rp2350_peripheral_address(address)) {
+        // A data access must not populate an executable TLB entry.
+        *prot &= ~PAGE_EXEC;
+    }
+#endif
 
 #ifdef TARGET_PROTO_ARM_M
     /* TrustZone translation fetch succeeded and MPU check passed.
