@@ -39,6 +39,18 @@
 #include "common.h"
 #include "translate_vfp.h"
 
+static bool can_sleep_on_self_branch(CPUState *env)
+{
+#ifdef TARGET_PROTO_ARM_M
+    /* An RP2350 debugger can arm FPB while this branch is already running.
+     * Preserve instruction fetches so that the new comparator can match. */
+    return !env->rp2350_dcp_enabled;
+#else
+    (void)env;
+    return true;
+#endif
+}
+
 #define abort()                                                   \
     do {                                                          \
         cpu_abort(cpu, "ABORT at %s : %d\n", __FILE__, __LINE__); \
@@ -9362,7 +9374,7 @@ static void disas_arm_insn(CPUState *env, DisasContext *s, uint32_t insn)
             case 0xa:
             case 0xb:
                 /* branch (and link) */
-                if(insn == 0xeafffffe) {
+                if(insn == 0xeafffffe && can_sleep_on_self_branch(env)) {
                     tlib_printf(LOG_LEVEL_NOISY, "Loop to itself detected");
                     gen_helper_wfi();
                     s->base.is_jmp = DISAS_JUMP;
@@ -16474,7 +16486,7 @@ static void disas_thumb_insn(CPUState *env, DisasContext *s, uint16_t insn, uint
                 break;
             }
             /* unconditional branch */
-            if(insn == 0xe7fe) {
+            if(insn == 0xe7fe && can_sleep_on_self_branch(env)) {
                 tlib_printf(LOG_LEVEL_NOISY, "Loop to itself detected");
                 gen_helper_wfi();
                 s->base.is_jmp = DISAS_JUMP;
