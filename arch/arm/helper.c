@@ -1606,11 +1606,16 @@ void ccr_write(CPUState *env, uint32_t value, bool is_secure)
         value &= ~FIELD_MASK(V7M_CCR, IC);
     }
     if(!is_secure) {
-        value &= ~FIELD_MASK(V7M_CCR, TRD);
+        value = (value & ~FIELD_MASK(V7M_CCR, TRD))
+                | (env->v7m.ccr[M_REG_COMMON] & FIELD_MASK(V7M_CCR, TRD));
     }
 
-    env->v7m.ccr[M_REG_COMMON] = value & V7M_CCR_NOT_BANKED_FIELDS;
-    env->v7m.ccr[is_secure] = value & ~V7M_CCR_NOT_BANKED_FIELDS;
+    /* The Secure bank also stores the shared fields. Preserve each bank's
+     * other field class when updating either view. */
+    env->v7m.ccr[M_REG_COMMON] = (env->v7m.ccr[M_REG_COMMON] & ~V7M_CCR_NOT_BANKED_FIELDS)
+                              | (value & V7M_CCR_NOT_BANKED_FIELDS);
+    env->v7m.ccr[is_secure] = (env->v7m.ccr[is_secure] & V7M_CCR_NOT_BANKED_FIELDS)
+                           | (value & ~V7M_CCR_NOT_BANKED_FIELDS);
 }
 
 static inline bool lsp_store_helper(CPUState *env, uint32_t *address, uint32_t val, bool is_secure)
