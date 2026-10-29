@@ -515,6 +515,14 @@ typedef struct CPUState {
         bool engaged;
     } rp2350_dcp[M_REG_NUM_BANKS];
     bool rp2350_dcp_enabled;
+    struct {
+        uint64_t salt;
+        uint32_t random;
+        uint8_t count;
+        bool salt_valid;
+        bool fault;
+        bool stalled;
+    } rp2350_rcp;
 #endif
 
     CPU_COMMON

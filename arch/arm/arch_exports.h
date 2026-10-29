@@ -24,6 +24,8 @@ void tlib_set_exception_vector_address(uint32_t address);
 
 #ifdef TARGET_PROTO_ARM_M
 void tlib_set_sleep_on_exception_exit(int32_t);
+uint32_t tlib_rp2350_rcp_set_salt(uint64_t salt);
+void tlib_rp2350_rcp_set_fault(void);
 
 void tlib_set_interrupt_vector_base(uint32_t address, bool secure);
 uint32_t tlib_get_interrupt_vector_base(bool secure);

@@ -297,6 +297,9 @@ int cpu_exec(CPUState *env)
     uintptr_t next_tb;
 
 #ifdef TARGET_PROTO_ARM_M
+    if(env->rp2350_rcp.stalled) {
+        return EXCP_WFI;
+    }
     if(env->v7m.locked_up &&
        (!(env->interrupt_request & CPU_INTERRUPT_HARD) || tlib_nvic_find_pending_irq() != ARMV7M_EXCP_NMI)) {
         /* Armv8-M ARM rules RMBTM and RHTVD: fetch, execution, and ITSTATE

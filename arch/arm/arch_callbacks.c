@@ -44,6 +44,10 @@ DEFAULT_INT_HANDLER2(int32_t tlib_nvic_set_pending_lazy_fp_fault, int32_t number
 
 DEFAULT_VOID_HANDLER1(void tlib_on_lockup_state_change, int32_t locked_up)
 
+DEFAULT_INT_HANDLER2(uint32_t tlib_rp2350_rcp_write_salt, uint32_t core, uint64_t salt)
+
+DEFAULT_VOID_HANDLER1(void tlib_rp2350_rcp_fault, uint32_t panic)
+
 DEFAULT_INT_HANDLER1(uint32_t tlib_try_halt_on_debug_breakpoint, void)
 
 DEFAULT_INT_HANDLER1(uint32_t tlib_has_enabled_trustzone, void)
