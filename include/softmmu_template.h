@@ -77,7 +77,7 @@ void notdirty_mem_writel(void *opaque, target_phys_addr_t ram_addr, uint32_t val
 static DATA_TYPE glue(glue(slow_ld, SUFFIX), MMUSUFFIX)(target_ulong addr, int mmu_idx, void *retaddr);
 static inline DATA_TYPE glue(glue(glue(slow_ld, SUFFIX), _err), MMUSUFFIX)(target_ulong addr, int mmu_idx, void *retaddr,
                                                                            int *err);
-static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr, target_ulong addr, void *retaddr)
+static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr, target_ulong addr, void *retaddr, int *err)
 {
     DATA_TYPE res;
     physaddr = (physaddr & TARGET_PAGE_MASK) + addr;
@@ -85,6 +85,9 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr, targe
     cpu->mem_io_vaddr = addr;
     uint64_t cpustate = cpu_get_state_for_memory_transaction(env, physaddr, READ_ACCESS_TYPE);
     unlock_dangling_locks(cpu);
+#if defined(TARGET_PROTO_ARM_M) && defined(SOFTMMU_CODE_ACCESS)
+    cpu->v7m.instruction_fetch_failed = false;
+#endif
 #if SHIFT == 0
     res = tlib_read_byte(physaddr, cpustate);
 #elif SHIFT == 1
@@ -94,6 +97,20 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr, targe
 #else
     res = tlib_read_quad_word(physaddr, cpustate);
 #endif /* SHIFT > 2 */
+#if defined(TARGET_PROTO_ARM_M) && defined(SOFTMMU_CODE_ACCESS)
+    if(unlikely(cpu->v7m.instruction_fetch_failed)) {
+        cpu->v7m.instruction_fetch_failed = false;
+        if(err) {
+            /* Leave architectural state unchanged until preceding translated
+             * instructions execute and the failing fetch is required. */
+            *err = 1;
+            return (DATA_TYPE)-1;
+        }
+        /* The managed callback has returned, so unwinding to the CPU loop
+         * cannot cross a managed frame. */
+        arch_raise_code_fetch_abort(cpu, addr, "from executable IO after a bus access error");
+    }
+#endif
     return res;
 }
 
@@ -236,11 +253,21 @@ redo:
             global_retaddr = retaddr;
             ioaddr = cpu->iotlb[mmu_idx][index];
 
+#ifdef SOFTMMU_CODE_ACCESS
+            /* Data-read caching must not reuse a speculative fetch failure or
+             * hide an architecturally required instruction bus transaction. */
+            res = glue(io_read, SUFFIX)(ioaddr, addr, retaddr, err);
+            if(err && *err) {
+                return res;
+            }
+#else
             if(!glue(try_cached_access_read, SUFFIX)(addr, &res)) {
-                res = glue(io_read, SUFFIX)(ioaddr, addr, retaddr);
+                res = glue(io_read, SUFFIX)(ioaddr, addr, retaddr, err);
                 cpu->previous_io_access_read_address = addr;
                 cpu->previous_io_access_read_value = res;
             }
+
+#endif
 
             if(unlikely(cpu->tlib_is_on_memory_access_enabled != 0)) {
                 tlib_assert(sizeof(res) <= sizeof(uint64_t));
@@ -255,6 +282,9 @@ redo:
             }
 #endif
             res = glue(glue(glue(slow_ld, SUFFIX), _err), MMUSUFFIX)(addr, mmu_idx, retaddr, err);
+            if(err && *err) {
+                return res;
+            }
             if(unlikely(cpu->tlib_is_on_memory_access_enabled != 0)) {
                 tlib_assert(sizeof(res) <= sizeof(uint64_t));
                 tlib_on_memory_access(CPU_PC(cpu), is_insn_fetch ? INSN_FETCH : MEMORY_READ, addr, DATA_SIZE, (uint64_t)res);
@@ -342,7 +372,7 @@ redo:
                 goto do_unaligned_access;
             }
             ioaddr = cpu->iotlb[mmu_idx][index];
-            res = glue(io_read, SUFFIX)(ioaddr, addr, retaddr);
+            res = glue(io_read, SUFFIX)(ioaddr, addr, retaddr, err);
         } else if(((addr & ~TARGET_PAGE_MASK) + DATA_SIZE - 1) >= TARGET_PAGE_SIZE) {
         do_unaligned_access:
             /* slow unaligned access (it spans two pages) */

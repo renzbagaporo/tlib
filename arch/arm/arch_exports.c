@@ -348,6 +348,15 @@ uint32_t tlib_get_bus_fault_address()
 
 EXC_INT_0(uint32_t, tlib_get_bus_fault_address)
 
+void tlib_report_instruction_fetch_bus_error(void)
+{
+    /* This export runs inside a managed callback. The native fetch helper
+     * consumes the result after that callback has returned. */
+    cpu->v7m.instruction_fetch_failed = true;
+}
+
+EXC_VOID_0(tlib_report_instruction_fetch_bus_error)
+
 void tlib_raise_precise_bus_fault(uint32_t address)
 {
 

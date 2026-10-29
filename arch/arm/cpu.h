@@ -374,6 +374,9 @@ typedef struct CPUState {
          * rules IHGFM and ILRNV for their BFHFNMINS-dependent visibility. */
         uint32_t bus_fault_status;     /* BFSR */
         uint32_t bus_fault_address;    /* BFAR */
+        /* A managed executable-IO transaction reports failure without
+         * committing a fault during speculative instruction translation. */
+        bool instruction_fetch_failed;
         uint32_t secure_fault_status;  /* SFSR */
         uint32_t secure_fault_address; /* SFAR. It can be shared with MMFAR, but it's more hassle, so let's keep it separate */
         uint32_t memory_fault_address[M_REG_NUM_BANKS];

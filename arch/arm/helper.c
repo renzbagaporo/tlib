@@ -3506,7 +3506,9 @@ union cpu_transaction_state {
     struct {
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
         unsigned char padding[7];
-        unsigned char : 4;
+        unsigned char : 2;
+        /*  5 */ bool instruction_fetch : 1;
+        /*  4 */ unsigned char : 1; /* Managed debug-access marker. */
         /*  3 */ bool semihosting : 1;
         /*  2 */ bool bus_secure : 1;
         /*  1 */ bool secure : 1;
@@ -3516,6 +3518,8 @@ union cpu_transaction_state {
         /*  1 */ bool secure : 1;
         /*  2 */ bool bus_secure : 1;
         /*  3 */ bool semihosting : 1;
+        /*  4 */ unsigned char : 1; /* Managed debug-access marker. */
+        /*  5 */ bool instruction_fetch : 1;
 #endif
     } flags;
 };
@@ -3554,6 +3558,7 @@ uint64_t cpu_get_state_for_memory_transaction(CPUState *env, target_ulong addr, 
     state.flags.privileged = in_privileged_mode(env);
     state.flags.secure = env->secure;
     state.flags.bus_secure = attribution_is_secure(attribution);
+    state.flags.instruction_fetch = access_type == ACCESS_INST_FETCH;
     return state.value;
 }
 #else
