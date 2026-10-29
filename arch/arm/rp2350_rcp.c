@@ -14,19 +14,45 @@
 #define RCP_TRUE  0xa500a500u
 #define RCP_FALSE 0x00c300c3u
 
+/* This lock protects only salt/PRNG transactions. In particular no managed
+ * callback, NMI delivery or peer operation runs while it is held: reset and
+ * salt writers can hold the managed reset monitor while taking this lock. */
+static void rcp_lock_salt(CPUState *env)
+{
+    while(__atomic_test_and_set(&env->rp2350_rcp_salt_lock, __ATOMIC_ACQUIRE)) { }
+}
+
+static void rcp_unlock_salt(CPUState *env)
+{
+    __atomic_clear(&env->rp2350_rcp_salt_lock, __ATOMIC_RELEASE);
+}
+
 uint32_t tlib_rp2350_rcp_set_salt(uint64_t salt)
 {
-    if(!cpu->rp2350_dcp_enabled || __atomic_load_n(&cpu->rp2350_rcp.salt_valid, __ATOMIC_ACQUIRE)) {
+    if(!cpu->rp2350_dcp_enabled) return 0;
+    rcp_lock_salt(cpu);
+    if(__atomic_load_n(&cpu->rp2350_rcp.salt_valid, __ATOMIC_ACQUIRE)) {
+        rcp_unlock_salt(cpu);
         return 0;
     }
     cpu->rp2350_rcp.salt = salt;
     cpu->rp2350_rcp.random = salt >> 40;
-    /* Readers acquire valid before accessing these immutable canary bits or
-     * the PRNG seed. The managed reset monitor serializes reset and writers. */
     __atomic_store_n(&cpu->rp2350_rcp.salt_valid, true, __ATOMIC_RELEASE);
+    rcp_unlock_salt(cpu);
     return 1;
 }
 EXC_INT_1(uint32_t, tlib_rp2350_rcp_set_salt, uint64_t, salt)
+
+void tlib_rp2350_rcp_reset_salt(void)
+{
+    if(!cpu->rp2350_dcp_enabled) return;
+    rcp_lock_salt(cpu);
+    __atomic_store_n(&cpu->rp2350_rcp.salt_valid, false, __ATOMIC_RELEASE);
+    cpu->rp2350_rcp.salt = 0;
+    cpu->rp2350_rcp.random = 0;
+    rcp_unlock_salt(cpu);
+}
+EXC_VOID_0(tlib_rp2350_rcp_reset_salt)
 
 void tlib_rp2350_rcp_set_fault(void)
 {
@@ -177,10 +203,15 @@ uint32_t HELPER(rp2350_rcp)(CPUState *env, uint32_t insn)
         if(!tlib_rp2350_rcp_write_salt(crm & 1, salt)) {
             return rcp_fault(env);
         }
+    }
+    rcp_lock_salt(env);
+    if(pair && opc1 == 8) {
+        // The cross-core write above has already completed without this lock.
     } else if(transfer && read && opc1 == 1) {
         result = __atomic_load_n(&env->rp2350_rcp.salt_valid, __ATOMIC_ACQUIRE) ? RCP_TRUE : RCP_FALSE;
     } else {
         if(!__atomic_load_n(&env->rp2350_rcp.salt_valid, __ATOMIC_ACQUIRE)) {
+            rcp_unlock_salt(env);
             return rcp_fault(env);
         }
         if(pair) {
@@ -214,10 +245,15 @@ uint32_t HELPER(rp2350_rcp)(CPUState *env, uint32_t insn)
         } else {
             /* PANIC stalls immediately and also faults the peer. */
             __atomic_store_n(&env->rp2350_rcp.fault, true, __ATOMIC_RELEASE);
+            rcp_unlock_salt(env);
             tlib_rp2350_rcp_fault(1);
             return rcp_stall(env);
         }
     }
+    if(pass && !extract32(insn, 28, 1) && !(transfer && read && opc1 == 2) && __atomic_load_n(&env->rp2350_rcp.salt_valid, __ATOMIC_ACQUIRE)) {
+        rcp_random(env);
+    }
+    rcp_unlock_salt(env);
     if(!pass) {
         return rcp_fault(env);
     }
@@ -227,9 +263,6 @@ uint32_t HELPER(rp2350_rcp)(CPUState *env, uint32_t insn)
         } else {
             env->regs[rt] = result;
         }
-    }
-    if(!extract32(insn, 28, 1) && !(transfer && read && opc1 == 2) && __atomic_load_n(&env->rp2350_rcp.salt_valid, __ATOMIC_ACQUIRE)) {
-        rcp_random(env);
     }
     return 0;
 }

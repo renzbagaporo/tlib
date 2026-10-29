@@ -583,6 +583,11 @@ void cpu_reset(CPUState *env)
     bool was_locked_up = env->v7m.locked_up;
     bool rp2350_dcp_enabled = env->rp2350_dcp_enabled;
     bool rp2350_idau_enabled = env->rp2350_idau_enabled;
+    /* Both salts belong to core 0's reset domain. A local processor reset
+     * clears the execution/fault state, but preserves its provisioned salt. */
+    uint64_t rp2350_salt = env->rp2350_rcp.salt;
+    uint32_t rp2350_random = env->rp2350_rcp.random;
+    bool rp2350_salt_valid = env->rp2350_rcp.salt_valid;
     uint32_t number_of_idau_regions = env->number_of_idau_regions;
     uint32_t number_of_sau_regions = env->number_of_sau_regions;
 #endif
@@ -594,6 +599,9 @@ void cpu_reset(CPUState *env)
 #ifdef TARGET_PROTO_ARM_M
     env->rp2350_dcp_enabled = rp2350_dcp_enabled;
     env->rp2350_idau_enabled = rp2350_idau_enabled;
+    env->rp2350_rcp.salt = rp2350_salt;
+    env->rp2350_rcp.random = rp2350_random;
+    env->rp2350_rcp.salt_valid = rp2350_salt_valid;
     env->number_of_idau_regions = number_of_idau_regions;
     env->number_of_sau_regions = number_of_sau_regions;
     if(was_locked_up) {

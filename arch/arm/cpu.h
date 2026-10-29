@@ -530,6 +530,9 @@ typedef struct CPUState {
 
     /* Fields after CPU_COMMON are preserved on reset but not serialized as opposed to the ones before CPU_COMMON. */
 
+#ifdef TARGET_PROTO_ARM_M
+    bool rp2350_rcp_salt_lock;
+#endif
     TTable *cp_regs;
 } CPUState;
 

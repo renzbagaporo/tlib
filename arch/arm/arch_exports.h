@@ -27,6 +27,7 @@ void tlib_set_sleep_on_exception_exit(int32_t);
 void tlib_add_fpb_breakpoint(uint32_t address);
 void tlib_remove_fpb_breakpoint(uint32_t address);
 uint32_t tlib_rp2350_rcp_set_salt(uint64_t salt);
+void tlib_rp2350_rcp_reset_salt(void);
 void tlib_rp2350_rcp_set_fault(void);
 
 void tlib_set_interrupt_vector_base(uint32_t address, bool secure);
