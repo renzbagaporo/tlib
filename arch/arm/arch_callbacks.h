@@ -24,6 +24,7 @@ int32_t tlib_nvic_set_pending_lazy_fp_fault(int32_t no, uint32_t fpccr);
 void tlib_on_lockup_state_change(int32_t locked_up);
 uint32_t tlib_rp2350_rcp_write_salt(uint32_t core, uint64_t salt);
 void tlib_rp2350_rcp_fault(uint32_t panic);
+uint32_t tlib_rp2350_gpio_access(uint32_t control, uint64_t value, uint64_t mask, void *result);
 uint32_t tlib_try_halt_on_debug_breakpoint(void);
 uint32_t tlib_try_halt_on_fpb_breakpoint(void);
 uint32_t tlib_has_enabled_trustzone(void);

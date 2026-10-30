@@ -48,6 +48,8 @@ DEFAULT_INT_HANDLER2(uint32_t tlib_rp2350_rcp_write_salt, uint32_t core, uint64_
 
 DEFAULT_VOID_HANDLER1(void tlib_rp2350_rcp_fault, uint32_t panic)
 
+DEFAULT_INT_HANDLER4(uint32_t tlib_rp2350_gpio_access, uint32_t control, uint64_t value, uint64_t mask, void *result)
+
 DEFAULT_INT_HANDLER1(uint32_t tlib_try_halt_on_debug_breakpoint, void)
 
 DEFAULT_INT_HANDLER1(uint32_t tlib_try_halt_on_fpb_breakpoint, void)

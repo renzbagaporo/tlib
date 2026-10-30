@@ -71,6 +71,7 @@ DEF_HELPER_1(exception, void, i32)
 DEF_HELPER_4(fpb_breakpoint, void, env, i32, i32, i32)
 DEF_HELPER_2(rp2350_dcp, i32, env, i32)
 DEF_HELPER_2(rp2350_rcp, i32, env, i32)
+DEF_HELPER_2(rp2350_gpio, i32, env, i32)
 #endif
 DEF_HELPER_0(wfi, void)
 DEF_HELPER_0(wfe, void)
