@@ -6677,6 +6677,37 @@ static void decode_RV32_64C(CPUState *env, DisasContext *dc)
 
 static void decode_RV32_64G(CPUState *env, DisasContext *dc)
 {
+    if(env->hazard3_enabled) {
+        uint32_t insn = dc->opcode;
+        uint32_t kind = insn & 0xe200707f;
+        if(kind == 0x0000000b || kind == 0x0000400b) {
+            TCGv value = tcg_temp_new();
+            TCGv shift = tcg_temp_new();
+            gen_get_gpr(value, (insn >> 15) & 31);
+            if(kind == 0x0000400b) {
+                tcg_gen_movi_tl(shift, (insn >> 20) & 31);
+            } else {
+                gen_get_gpr(shift, (insn >> 20) & 31);
+                tcg_gen_andi_tl(shift, shift, 31);
+            }
+            tcg_gen_shr_tl(value, value, shift);
+            tcg_gen_andi_tl(value, value, (1u << (((insn >> 26) & 7) + 1)) - 1);
+            gen_set_gpr((insn >> 7) & 31, value);
+            tcg_temp_free(shift);
+            tcg_temp_free(value);
+            return;
+        }
+        if(insn == 0x00002033 || insn == 0x00102033) {
+            TCGv_i32 opcode = tcg_const_i32(insn);
+            TCGv next_pc = tcg_const_tl(dc->npc);
+            gen_helper_hazard3_hint(cpu_env, opcode, next_pc);
+            tcg_temp_free(next_pc);
+            tcg_temp_free_i32(opcode);
+            gen_exit_tb_no_chaining(dc->base.tb);
+            dc->base.is_jmp = DISAS_BRANCH;
+            return;
+        }
+    }
     int rs1;
     int rs2;
     int rd;
@@ -6803,7 +6834,27 @@ static void log_unhandled_instruction_length(DisasContext *dc, uint32_t instruct
 
 static int disas_insn(CPUState *env, DisasContext *dc)
 {
-    uint16_t first_word_of_opcode = lduw_code(dc->base.pc);
+    int fetch_error = 0;
+    target_ulong fault_address = dc->base.pc;
+    uint16_t first_word_of_opcode = env->hazard3_enabled ?
+        lduw_err_code(dc->base.pc, &fetch_error) : lduw_code(dc->base.pc);
+    uint32_t fetched_opcode = first_word_of_opcode;
+    int fetched_length = decode_instruction_length(first_word_of_opcode);
+    if(env->hazard3_enabled && !fetch_error && fetched_length != 2) {
+        fault_address += 2;
+        fetched_opcode |= (uint32_t)lduw_err_code(fault_address, &fetch_error) << 16;
+    }
+    if(unlikely(fetch_error)) {
+        // Emit the fault after preceding translated instructions, rather than
+        // taking a speculative fetch failure during block translation.
+        TCGv badaddr = tcg_const_tl(fault_address);
+        tcg_gen_st_tl(badaddr, cpu_env, offsetof(CPUState, badaddr));
+        tcg_temp_free(badaddr);
+        dc->opcode = 0;
+        generate_exception(dc, RISCV_EXCP_INST_ACCESS_FAULT);
+        dc->base.is_jmp = DISAS_BRANCH;
+        return 2;
+    }
 
     /* Instructions containg all zeros are illegal in RISC-V.
        We don't need to check the length because the first
@@ -6818,7 +6869,7 @@ static int disas_insn(CPUState *env, DisasContext *dc)
        We don't need to check the length because the first half word
        0xFFFF would be identified as >=192-bit which is not supported. */
     if(first_word_of_opcode == 0xFFFF) {
-        dc->opcode = ldl_code(dc->base.pc);
+        dc->opcode = (env->hazard3_enabled ? fetched_opcode : ldl_code(dc->base.pc));
         kill_unknown(dc, RISCV_EXCP_ILLEGAL_INST);
         return 0;
     }
@@ -6831,7 +6882,7 @@ static int disas_insn(CPUState *env, DisasContext *dc)
             dc->opcode = first_word_of_opcode;
             break;
         case 4:
-            dc->opcode = ldl_code(dc->base.pc);
+            dc->opcode = (env->hazard3_enabled ? fetched_opcode : ldl_code(dc->base.pc));
             break;
         case 6:
         case 8:
@@ -6839,7 +6890,7 @@ static int disas_insn(CPUState *env, DisasContext *dc)
             break;
         default:
             //  Load 32 bits (ILEN) of an instruction for storing in mtval and logging
-            dc->opcode = ldl_code(dc->base.pc);
+            dc->opcode = (env->hazard3_enabled ? fetched_opcode : ldl_code(dc->base.pc));
             log_unhandled_instruction_length(dc, instruction_length);
             kill_unknown(dc, RISCV_EXCP_ILLEGAL_INST);
             return 0;

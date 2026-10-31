@@ -17,6 +17,7 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "cpu.h"
+#include "hazard3.h"
 
 #include "def-helper.h"
 #include "cpu-common.h"
@@ -31,6 +32,8 @@
 
 void cpu_reset(CPUState *env)
 {
+    bool hazard3_enabled = env->hazard3_enabled;
+    uint64_t hazard3_irq_levels = env->hazard3_irq_levels;
     int32_t interrupt_mode = env->interrupt_mode;
     int32_t csr_validation_level = env->csr_validation_level;
     int privilege = env->privilege_architecture;
@@ -47,6 +50,12 @@ void cpu_reset(CPUState *env)
     target_ulong elen = env->elen;
 
     memset(env, 0, RESET_OFFSET);
+    env->hazard3_enabled = hazard3_enabled;
+    if(hazard3_enabled) {
+        // Input pins are external to the processor reset domain.
+        env->hazard3_irq_levels = hazard3_irq_levels;
+        env->hazard3_meicontext = 0x8000;
+    }
 
     env->interrupt_mode = interrupt_mode;
     env->csr_validation_level = csr_validation_level;
@@ -431,11 +440,15 @@ target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr)
     return phys_addr;
 }
 
-/* Transaction filtering by state is not yet implemented for this architecture.
- * This placeholder function is here to make it clear that more CPUs are expected to support this in the future. */
 uint64_t cpu_get_state_for_memory_transaction(CPUState *env, target_ulong addr, int access_type)
 {
-    return 0;
+    if(!env->hazard3_enabled) return 0;
+    unsigned privilege = env->priv;
+    if(access_type != ACCESS_INST_FETCH && (env->mstatus & MSTATUS_MPRV)) {
+        privilege = get_field(env->mstatus, MSTATUS_MPP);
+    }
+    // RP2350_Hazard3.ContextState: effective M-mode and instruction-fetch.
+    return (privilege == PRV_M ? 1 : 0) | (access_type == ACCESS_INST_FETCH ? 2 : 0);
 }
 
 /*
@@ -502,6 +515,8 @@ void do_interrupt(CPUState *env)
     if(env->exception_index == EXCP_NONE) {
         return;
     }
+
+    hazard3_interrupt_enter(env, env->exception_index == (RISCV_EXCP_INT_FLAG | IRQ_M_EXT));
 
     if(env->interrupt_begin_callback_enabled) {
         tlib_on_interrupt_begin(env->exception_index);

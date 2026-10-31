@@ -309,7 +309,8 @@ static inline pmp_priv_t pmp_get_privs_normal(int pmp_index, target_ulong priv)
 
     pmp_priv_t allowed_privs = PMP_READ | PMP_WRITE | PMP_EXEC;
 
-    if((priv != PRV_M) || pmp_is_locked(env, pmp_index)) {
+    if((priv != PRV_M) || pmp_is_locked(env, pmp_index) ||
+       (pmp_index < 8 && (env->hazard3_pmp_m_mask & (1u << pmp_index)))) {
         allowed_privs &= env->pmp_state.pmp[pmp_index].cfg_reg;
     }
     return allowed_privs;

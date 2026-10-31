@@ -18,6 +18,7 @@
  */
 #include <stdint.h>
 #include "cpu.h"
+#include "hazard3.h"
 #include "unwind.h"
 #include "arch_exports.h"
 
@@ -265,6 +266,43 @@ void tlib_enter_wfi()
 
 EXC_VOID_0(tlib_enter_wfi)
 
+
+void tlib_hazard3_enable(void)
+{
+    cpu->hazard3_enabled = true;
+    cpu->hazard3_meicontext = 0x8000;
+}
+
+EXC_VOID_0(tlib_hazard3_enable)
+
+void tlib_hazard3_receive_event(void)
+{
+    __atomic_store_n(&cpu->hazard3_event, 1, __ATOMIC_RELEASE);
+}
+
+EXC_VOID_0(tlib_hazard3_receive_event)
+
+void tlib_hazard3_set_irq(uint32_t irq, uint32_t value)
+{
+    hazard3_set_irq(cpu, irq, value != 0);
+}
+
+EXC_VOID_2(tlib_hazard3_set_irq, uint32_t, irq, uint32_t, value)
+
+void tlib_hazard3_report_bus_fault(uint32_t address, uint32_t access)
+{
+    if(access == 2) {
+        cpu->hazard3_fetch_failed = true;
+        return;
+    }
+    cpu->badaddr = address;
+    cpu->tb_interrupt_exception_from_callback = access == 1 ? RISCV_EXCP_STORE_AMO_ACCESS_FAULT :
+        RISCV_EXCP_LOAD_ACCESS_FAULT;
+    cpu->tb_interrupt_request_from_callback = TB_INTERRUPT_SYNCHRONOUS_EXCEPTION;
+}
+
+EXC_VOID_2(tlib_hazard3_report_bus_fault, uint32_t, address, uint32_t, access)
+
 int32_t tlib_install_custom_interrupt(uint8_t id, bool mip_trigger, bool sip_trigger)
 {
 #if defined(TARGET_RISCV64)
@@ -477,8 +515,8 @@ EXC_VOID_1(tlib_enable_external_pmp, bool, value)
 static_assert(MAX_RISCV_PMPS >= 64, "Pre-defined PMP entry count must not be lesser than max settable count");
 void tlib_set_pmp_entry_count(uint32_t entry_count)
 {
-    if(entry_count != 0 && entry_count != 16 && entry_count != 64) {
-        tlib_abortf("Unexpected PMP entry count %d, only 0, 16, and 64 are allowed", entry_count);
+    if(entry_count != 0 && entry_count != 8 && entry_count != 16 && entry_count != 64) {
+        tlib_abortf("Unexpected PMP entry count %d, only 0, 8, 16, and 64 are allowed", entry_count);
         return;
     }
     cpu->pmp_entry_count = entry_count;

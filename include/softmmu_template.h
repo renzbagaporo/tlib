@@ -88,6 +88,9 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr, targe
 #if defined(TARGET_PROTO_ARM_M) && defined(SOFTMMU_CODE_ACCESS)
     cpu->v7m.instruction_fetch_failed = false;
 #endif
+#if defined(TARGET_RISCV) && defined(SOFTMMU_CODE_ACCESS)
+    cpu->hazard3_fetch_failed = false;
+#endif
 #if SHIFT == 0
     res = tlib_read_byte(physaddr, cpustate);
 #elif SHIFT == 1
@@ -108,6 +111,16 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr, targe
         }
         /* The managed callback has returned, so unwinding to the CPU loop
          * cannot cross a managed frame. */
+        arch_raise_code_fetch_abort(cpu, addr, "from executable IO after a bus access error");
+    }
+#endif
+#if defined(TARGET_RISCV) && defined(SOFTMMU_CODE_ACCESS)
+    if(unlikely(cpu->hazard3_fetch_failed)) {
+        cpu->hazard3_fetch_failed = false;
+        if(err) {
+            *err = 1;
+            return (DATA_TYPE)-1;
+        }
         arch_raise_code_fetch_abort(cpu, addr, "from executable IO after a bus access error");
     }
 #endif

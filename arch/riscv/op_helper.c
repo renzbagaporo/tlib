@@ -18,6 +18,7 @@
  */
 #include "cpu.h"
 #include "pmp.h"
+#include "hazard3.h"
 #define ALIGNED_ONLY
 #include "softmmu_exec.h"
 
@@ -410,6 +411,10 @@ inline void csr_write_helper(CPUState *env, target_ulong val_to_write, target_ul
         case CSR_MSTATUS: {
             target_ulong mstatus = env->mstatus;
             target_ulong mask = MSTATUS_MIE | MSTATUS_MPIE | MSTATUS_FS | MSTATUS_MPRV | MSTATUS_MPP | MSTATUS_MXR | MSTATUS_VS;
+            if(env->privilege_architecture >= RISCV_PRIV1_10 &&
+               (riscv_has_ext(env, RISCV_FEATURE_RVU) || riscv_has_ext(env, RISCV_FEATURE_RVS))) {
+                mask |= MSTATUS_TW;
+            }
             if(riscv_has_ext(env, RISCV_FEATURE_RVS)) {
                 mask |= MSTATUS_SIE | MSTATUS_SPIE | MSTATUS_SUM | MSTATUS_SPP;
 
@@ -1149,12 +1154,16 @@ void validate_csr(CPUState *env, uint64_t which, uint64_t write)
 void helper_csrrw_no_read(CPUState *env, target_ulong src, target_ulong csr)
 {
     validate_csr(env, csr, 1);
+    target_ulong previous;
+    if(hazard3_csr(env, csr, src, 0, false, true, &previous)) return;
     csr_write_helper(env, src, csr);
 }
 
 target_ulong helper_csrrw(CPUState *env, target_ulong src, target_ulong csr)
 {
     validate_csr(env, csr, 1);
+    target_ulong previous;
+    if(hazard3_csr(env, csr, src, 0, true, true, &previous)) return previous;
 
     /* We implement these CSRs explicitly here because reading them might return `src` which is not available
        in csr_read_helper. Also, access to them with instructions other than csrrw is reserved. */
@@ -1211,6 +1220,8 @@ target_ulong helper_csrrw(CPUState *env, target_ulong src, target_ulong csr)
 target_ulong helper_csrrs(CPUState *env, target_ulong src, target_ulong csr, target_ulong rs1_pass)
 {
     validate_csr(env, csr, rs1_pass != 0);
+    target_ulong previous;
+    if(hazard3_csr(env, csr, src, 1, true, rs1_pass != 0, &previous)) return previous;
 
     /* We implement these CSRs explicitly here because the value used in the RMW (mstatus) is different
        from the result. */
@@ -1256,6 +1267,8 @@ void helper_sfence_vma(CPUState *env)
 target_ulong helper_csrrc(CPUState *env, target_ulong src, target_ulong csr, target_ulong rs1_pass)
 {
     validate_csr(env, csr, rs1_pass != 0);
+    target_ulong previous;
+    if(hazard3_csr(env, csr, src, 2, true, rs1_pass != 0, &previous)) return previous;
 
     if(csr == CSR_MNXTI) {
         src &= 0x1f;
@@ -1396,6 +1409,8 @@ target_ulong helper_mret(CPUState *env, target_ulong cpu_pc_deb)
     //  Clear this HART's reservation.
     env->reserved_address = 0;
 
+    hazard3_interrupt_return(env);
+
     if(env->interrupt_end_callback_enabled) {
         tlib_on_interrupt_end(env->exception_index);
     }
@@ -1405,10 +1420,41 @@ target_ulong helper_mret(CPUState *env, target_ulong cpu_pc_deb)
 
 void helper_wfi(CPUState *env)
 {
+    if(env->privilege_architecture >= RISCV_PRIV1_10 && env->priv != PRV_M && (env->mstatus & MSTATUS_TW)) {
+        helper_raise_illegal_instruction(env);
+    }
     /* To treat wfi as nop (as described in the specification), additional facilities, outside of this translation library, are
      * required. */
     env->wfi = 1;
     env->exception_index = EXCP_WFI;
+}
+
+void TLIB_NORETURN arch_raise_code_fetch_abort_impl(CPUState *env, target_ulong addr, const char *reason)
+{
+    if(!env->hazard3_enabled) cpu_abort(env, "Trying to execute code %s at 0x" TARGET_FMT_lx, reason, addr);
+    env->badaddr = addr;
+    env->exception_index = RISCV_EXCP_INST_ACCESS_FAULT;
+    cpu_sync_instructions_count(env);
+    if(env->instructions_count_value < env->instructions_count_limit) {
+        env->instructions_count_value++;
+        env->instructions_count_total_value++;
+    }
+    cpu_loop_exit_without_hook(env);
+}
+
+void helper_hazard3_hint(CPUState *env, uint32_t opcode, target_ulong next_pc)
+{
+    if(env->priv != PRV_M && (env->mstatus & MSTATUS_TW)) {
+        env->opcode = opcode;
+        helper_raise_exception(env, RISCV_EXCP_ILLEGAL_INST);
+    }
+    env->pc = next_pc;
+    if(opcode == 0x00102033) {
+        tlib_hazard3_send_event();
+    } else if(!__atomic_exchange_n(&env->hazard3_event, 0, __ATOMIC_ACQ_REL)) {
+        env->hazard3_blocking = true;
+        helper_wfi(env);
+    }
 }
 
 void helper_fence_i(CPUState *env)

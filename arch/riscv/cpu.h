@@ -169,6 +169,17 @@ struct CPUState {
 
     /* physical memory protection */
     pmp_table_t pmp_state;
+    uint32_t hazard3_pmp_m_mask;
+    bool hazard3_enabled;
+    bool hazard3_fetch_failed;
+    uint32_t hazard3_event;
+    bool hazard3_blocking;
+    uint64_t hazard3_irq_levels;
+    uint64_t hazard3_irq_enable;
+    uint64_t hazard3_irq_force;
+    uint8_t hazard3_irq_priority[52];
+    uint32_t hazard3_meicontext;
+    uint32_t hazard3_msleep;
     target_ulong pmp_addr_mask;
     bool use_external_pmp;
 
@@ -273,9 +284,13 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc, target_
 
 static inline bool cpu_has_work(CPUState *env)
 {
+    if(env->hazard3_blocking && __atomic_exchange_n(&env->hazard3_event, 0, __ATOMIC_ACQ_REL)) {
+        env->wfi = 0;
+    }
     //  clear WFI if waking up condition is met
     //  this CLIC interrupt check is a bit overly eager, but it's faster than checking all the conditions
     env->wfi &= !((cpu->mip & cpu->mie) || cpu->clic_interrupt_pending != EXCP_NONE);
+    if(!env->wfi) env->hazard3_blocking = false;
     return !env->wfi;
 }
 

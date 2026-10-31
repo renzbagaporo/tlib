@@ -4,6 +4,7 @@
 DEF_HELPER_2(raise_exception, void, env, i32)
 DEF_HELPER_1(raise_exception_debug, void, env)
 DEF_HELPER_3(raise_exception_mbadaddr, void, env, i32, tl)
+DEF_HELPER_3(hazard3_hint, void, env, i32, tl)
 
 /* Floating Point - fused */
 DEF_HELPER_5(fmadd_s, i64, env, i64, i64, i64, i64)
