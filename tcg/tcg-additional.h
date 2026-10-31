@@ -8,6 +8,7 @@ void attach_ld_helpers(void *__ldb, void *__ldw, void *__ldl, void *__ldq);
 void attach_st_helpers(void *__stb, void *__stw, void *__stl, void *__stq);
 
 void set_temp_buf_offset(unsigned int offset);
+void set_memory_access_event_enabled_offset(unsigned int offset);
 void set_tlb_table_n_0_rwa(int i, unsigned int read, unsigned int write, unsigned int addend);
 void set_tlb_table_n_0(int i, unsigned int offset);
 void set_TARGET_PAGE_BITS(int val);

@@ -1119,12 +1119,27 @@ static void tcg_prepare_st_ld_args(TCGContext *s, TCGType type, int rexw, int r0
 /* XXX: qemu_ld and qemu_st could be modified to clobber only EDX and
    EAX. It will be useful once fixed registers globals are less
    common. */
+static uint8_t *tcg_out_memory_observer_guard(TCGContext *s)
+{
+    // Observers can be enabled by a device write in this very block. Check the
+    // current CPU flag rather than baking instrumentation state into its TLB
+    // fast path, so no instruction replay or partial retirement is required.
+    // Preserve r0/r1: the TLB page index has already been prepared in r1.
+    tcg_out_modrm_offset(s, OPC_ARITH_EvIb, ARITH_CMP, TCG_AREG0, memory_access_event_enabled_offset);
+    tcg_out8(s, 0);
+    tcg_out_opc(s, OPC_JCC_long + JCC_JNE, 0, 0, 0);
+    uint8_t *branch = s->code_ptr;
+    tcg_out32(s, 0);
+    return branch;
+}
+
 static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, int opc)
 {
     int data_reg, data_reg2 = 0;
     int addrlo_idx;
     int mem_index, s_bits, arg_idx;
     uint8_t *label_ptr[3];
+    uint8_t *observer_branch = NULL;
 
     data_reg = args[0];
     addrlo_idx = 1;
@@ -1145,6 +1160,7 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, int opc)
     tcg_prepare_st_ld_args(s, type, rexw, r0, r1, args[addrlo_idx]);
 
     if(likely(s->use_tlb)) {
+        observer_branch = tcg_out_memory_observer_guard(s);
         tcg_out_tlb_load(s, addrlo_idx, mem_index, s_bits, args, label_ptr,
                          /*offsetof(CPUTLBEntry, addr_read)*/ tlb_entry_addr_read, r0, r1, type, rexw);
 
@@ -1159,6 +1175,7 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, int opc)
         /* TLB Miss.  */
 
         /* label1: */
+        patch_reloc(observer_branch, R_386_PC32, (tcg_target_long)s->code_ptr, -4);
         *label_ptr[0] = s->code_ptr - label_ptr[0] - 1;
         if(TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
             *label_ptr[1] = s->code_ptr - label_ptr[1] - 1;
@@ -1298,6 +1315,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, int opc)
     int mem_index, s_bits;
     int stack_adjust;
     uint8_t *label_ptr[3];
+    uint8_t *observer_branch = NULL;
 
     data_reg = args[0];
     addrlo_idx = 1;
@@ -1318,6 +1336,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, int opc)
     tcg_prepare_st_ld_args(s, type, rexw, r0, r1, args[addrlo_idx]);
 
     if(likely(s->use_tlb)) {
+        observer_branch = tcg_out_memory_observer_guard(s);
         tcg_out_tlb_load(s, addrlo_idx, mem_index, s_bits, args, label_ptr,
                          /* offsetof(CPUTLBEntry, addr_write) */ tlb_entry_addr_write, r0, r1, type, rexw);
 
@@ -1332,6 +1351,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, int opc)
         /* TLB Miss.  */
 
         /* label1: */
+        patch_reloc(observer_branch, R_386_PC32, (tcg_target_long)s->code_ptr, -4);
         *label_ptr[0] = s->code_ptr - label_ptr[0] - 1;
         if(TARGET_LONG_BITS > TCG_TARGET_REG_BITS) {
             *label_ptr[1] = s->code_ptr - label_ptr[1] - 1;

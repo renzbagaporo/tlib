@@ -14,6 +14,7 @@ char *TCG_pstrcat(char *buf, int buf_size, const char *s);
 #define MMU_MODES_MAX 16
 
 extern unsigned int temp_buf_offset;
+extern unsigned int memory_access_event_enabled_offset;
 extern unsigned int tlb_table_n_0_addr_read[MMU_MODES_MAX];
 extern unsigned int tlb_table_n_0_addr_write[MMU_MODES_MAX];
 extern unsigned int tlb_table_n_0_addend[MMU_MODES_MAX];

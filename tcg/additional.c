@@ -93,6 +93,7 @@ char *TCG_pstrcat(char *buf, int buf_size, const char *s)
 }
 
 unsigned int temp_buf_offset;
+unsigned int memory_access_event_enabled_offset;
 unsigned int tlb_table_n_0[MMU_MODES_MAX];
 unsigned int tlb_table_n_0_addr_read[MMU_MODES_MAX];
 unsigned int tlb_table_n_0_addr_write[MMU_MODES_MAX];
@@ -116,6 +117,11 @@ void set_sizeof_CPUTLBEntry(unsigned int sz)
 void set_temp_buf_offset(unsigned int offset)
 {
     temp_buf_offset = offset;
+}
+
+void set_memory_access_event_enabled_offset(unsigned int offset)
+{
+    memory_access_event_enabled_offset = offset;
 }
 
 void set_tlb_entry_addr_rwu(unsigned int read, unsigned int write, unsigned int addend)

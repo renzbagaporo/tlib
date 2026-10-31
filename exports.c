@@ -50,6 +50,7 @@ static void init_tcg()
     stcg.stq = __stq_mmu;
     tcg_attach(&stcg);
     set_temp_buf_offset(offsetof(CPUState, temp_buf));
+    set_memory_access_event_enabled_offset(offsetof(CPUState, tlib_is_on_memory_access_enabled));
     int i;
     for(i = 0; i < NB_MMU_MODES + 1; i++) {
         set_tlb_table_n_0_rwa(i, offsetof(CPUState, tlb_table[i][0].addr_read), offsetof(CPUState, tlb_table[i][0].addr_write),
@@ -776,8 +777,6 @@ EXC_VOID_1(tlib_set_interrupt_end_hook_present, uint32_t, val)
 void tlib_on_memory_access_event_enabled(int32_t value)
 {
     cpu->tlib_is_on_memory_access_enabled = !!value;
-    //  In order to get all of the memory accesses we need to prevent tcg from using the tlb
-    tcg_context_use_tlb(!value);
 }
 
 EXC_VOID_1(tlib_on_memory_access_event_enabled, int32_t, value)
