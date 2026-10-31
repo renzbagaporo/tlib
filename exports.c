@@ -1245,9 +1245,9 @@ void tlib_enable_write_cache(uint64_t access_address, uint64_t not_cached_count,
 
 EXC_VOID_3(tlib_enable_write_cache, uint64_t, access_address, uint64_t, not_cached_count, uint64_t, cached_count)
 
-uint64_t tlib_get_cpu_state_for_memory_transaction(CPUState *env, uint64_t addr, int access_type)
+uint64_t tlib_get_cpu_state_for_memory_transaction(uint64_t addr, uint32_t access_type)
 {
-    return cpu_get_state_for_memory_transaction(env, addr, access_type);
+    return cpu_get_state_for_memory_transaction(cpu, addr, access_type);
 }
 
 //  No exception wrapper for performance reasons, any callbacks called by cpu_get_state_for_memory_transaction
