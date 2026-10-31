@@ -20,7 +20,7 @@
 
 /* Processed comparison status uses the saved comparison and classification
  * fields. The packed context layout and this truth table were checked against
- * an RP2350 with CHIP_ID 0x30004d27, DCP VERSION 4. Unsupported arithmetic is
+ * an RP2350 with CHIP_ID 0x30004927, DCP VERSION 4. Unsupported arithmetic is
  * still rejected below; restoring a context does not execute that arithmetic. */
 static uint32_t dcp_comparison_status(uint32_t low, uint32_t high)
 {
