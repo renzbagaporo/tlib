@@ -515,7 +515,10 @@ typedef struct CPUState {
     struct {
         uint64_t xm;
         uint64_t ym;
-        bool engaged;
+        /* REFD/WEFD context words: XE, shift/compare/engaged, XF;
+         * YE and YF. Keep the engaged bit in its architectural word. */
+        uint32_t efd_low;
+        uint32_t efd_high;
     } rp2350_dcp[M_REG_NUM_BANKS];
     bool rp2350_dcp_enabled;
     bool rp2350_idau_enabled;
