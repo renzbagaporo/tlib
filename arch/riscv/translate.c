@@ -6576,7 +6576,8 @@ static void decode_RV32_64C2(CPUState *env, DisasContext *dc)
             }
             break;
         case 5: {
-            if(!riscv_has_additional_ext(cpu, RISCV_FEATURE_ZCMT)) {
+            if(!riscv_has_additional_ext(cpu, RISCV_FEATURE_ZCMP) &&
+               !riscv_has_additional_ext(cpu, RISCV_FEATURE_ZCMT)) {
                 /* C.FSDSP -> fsd rs2, offset[8:3](x2)*/
                 gen_fp_store(dc, OPC_RISC_FSD, 2, GET_C_RS2(dc->opcode), GET_C_SDSP_IMM(dc->opcode));
                 /* C.SQSP */
@@ -6587,13 +6588,15 @@ static void decode_RV32_64C2(CPUState *env, DisasContext *dc)
             uint8_t funct2 = extract32(dc->opcode, 5, 2);
 
             //  Zcmp C.PUSH, C.POP, C.POPRET and C.POPRETZ
-            if(funct5 == 0x18 || funct5 == 0x1A || funct5 == 0x1E || funct5 == 0x1C) {
+            if(riscv_has_additional_ext(cpu, RISCV_FEATURE_ZCMP) &&
+               (funct5 == 0x18 || funct5 == 0x1A || funct5 == 0x1E || funct5 == 0x1C)) {
                 uint8_t rlist = GET_C_PUSHPOP_RLIST(dc->opcode);
                 target_ulong spimm = GET_C_PUSHPOP_SPIMM(dc->opcode);
 
                 //  rlist values 0 to 3 are reserved for a future EABI variant called cm.push.e
                 if(rlist < 4) {
                     kill_unknown(dc, RISCV_EXCP_ILLEGAL_INST);
+                    break;
                 }
 
                 //  Check for RISC-V Zcmp extension instructions
@@ -6606,7 +6609,7 @@ static void decode_RV32_64C2(CPUState *env, DisasContext *dc)
                 } else if(funct5 == 0x1C) {  //  C.POPRETZ - restore registers, set a0=0, and return
                     gen_popretz(dc, rlist, spimm);
                 }
-            } else if(funct5_high == 0x3  //  Zcmp C.MVSA01/C.MVA01S
+            } else if(riscv_has_additional_ext(cpu, RISCV_FEATURE_ZCMP) && funct5_high == 0x3  //  Zcmp C.MVSA01/C.MVA01S
                       && (funct2 == 0x1 || funct2 == 0x3)) {
                 uint8_t r1sc = GET_C_MVSA01_R1S(dc->opcode);
                 uint8_t r2sc = GET_C_MVSA01_R2S(dc->opcode);
@@ -6631,7 +6634,7 @@ static void decode_RV32_64C2(CPUState *env, DisasContext *dc)
                     gen_arith(dc, OPC_RISC_ADD, 10, xreg1, 0);  //  mv a0, r1s'
                     gen_arith(dc, OPC_RISC_ADD, 11, xreg2, 0);  //  mv a1, r2s'
                 }
-            } else if(funct5_high == 0x0) {  //  Zcmt: C.JT, C.JALT
+            } else if(riscv_has_additional_ext(cpu, RISCV_FEATURE_ZCMT) && funct5_high == 0x0) {  //  Zcmt: C.JT, C.JALT
                 uint8_t index = GET_C_JT_INDEX(dc->opcode);
                 //  JT: index<32, JALT: index>=32
                 gen_jt(dc, index, (index >= 32));

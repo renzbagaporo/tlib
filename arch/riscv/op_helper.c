@@ -1377,13 +1377,13 @@ target_ulong helper_mret(CPUState *env, target_ulong cpu_pc_deb)
     riscv_set_mode(env, prev_priv);
     csr_write_helper(env, mstatus, CSR_MSTATUS);
 
-    target_ulong mcause = env->mcause;
-    mcause = set_field(mcause, MCAUSE_MPP, lowest_priv);
-    mcause = set_field(mcause, MCAUSE_MPIE, 1);
-    //  MCAUSE_MPIL not affected by mret
-    csr_write_helper(env, mcause, CSR_MCAUSE);
-
     if(cpu_in_clic_mode(env)) {
+        target_ulong mcause = env->mcause;
+        mcause = set_field(mcause, MCAUSE_MPP, lowest_priv);
+        mcause = set_field(mcause, MCAUSE_MPIE, 1);
+        //  MCAUSE_MPIL not affected by mret
+        csr_write_helper(env, mcause, CSR_MCAUSE);
+
         target_ulong mintstatus = env->mintstatus;
         mintstatus = set_field(mintstatus, MINTSTATUS_MIL, get_field(env->mcause, MCAUSE_MPIL));
         csr_write_helper(env, mintstatus, CSR_MINTSTATUS);
