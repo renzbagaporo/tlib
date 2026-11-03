@@ -29,6 +29,7 @@ int32_t tlib_is_wfi(void);
 
 uint32_t tlib_get_page_size(void);
 void tlib_map_range(uint64_t start_addr, uint64_t length);
+void tlib_map_range_read_only(uint64_t start_addr, uint64_t length);
 void tlib_unmap_range(uint64_t start, uint64_t end);
 uint32_t tlib_is_range_mapped(uint64_t start, uint64_t end);
 

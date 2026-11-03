@@ -437,6 +437,16 @@ void tlib_map_range(uint64_t start_addr, uint64_t length)
 
 EXC_VOID_2(tlib_map_range, uint64_t, start_addr, uint64_t, length)
 
+/* Maps host memory for reads and instruction fetches; writes are passed to the bus. */
+void tlib_map_range_read_only(uint64_t start_addr, uint64_t length)
+{
+    ram_addr_t phys_offset = start_addr;
+    ram_addr_t size = length;
+    cpu_register_physical_memory(start_addr, size, phys_offset | IO_MEM_ROM);
+}
+
+EXC_VOID_2(tlib_map_range_read_only, uint64_t, start_addr, uint64_t, length)
+
 void tlib_unmap_range(uint64_t start, uint64_t end)
 {
     uint64_t new_start;
