@@ -115,7 +115,6 @@ void tlib_set_on_block_translation_enabled(int32_t value);
 void tlib_on_block_finished(uint64_t pc, uint32_t executed_instructions);
 void tlib_on_interrupt_begin(uint64_t exception_index);
 void tlib_on_interrupt_end(uint64_t exception_index);
-void tlib_hazard3_send_event(void);
 void tlib_profiler_announce_stack_change(uint64_t current_address, uint64_t current_return_address,
                                          uint64_t current_instructions_count, int32_t is_frame_add);
 void tlib_profiler_announce_context_change(uint64_t context_id);

@@ -102,7 +102,6 @@ DEFAULT_INT_HANDLER1(uint32_t tlib_is_in_debug_mode, void)
 DEFAULT_VOID_HANDLER1(void tlib_on_interrupt_begin, uint64_t exception_index)
 
 DEFAULT_VOID_HANDLER1(void tlib_on_interrupt_end, uint64_t exception_index)
-DEFAULT_VOID_HANDLER0(void tlib_hazard3_send_event)
 
 DEFAULT_PTR_HANDLER1(void *tlib_guest_offset_to_host_ptr, uint64_t offset)
 
